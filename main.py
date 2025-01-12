@@ -143,8 +143,9 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['current_player'] = CROSS
         keyboard = generate_keyboard(context.user_data['keyboard_state'])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        text = f'{context.user_data['game_state']} started!'
-        await query.message.reply_text(text, reply_markup=reply_markup)
+        game_state = context.user_data['game_state']
+        await query.message.reply_text(f'{game_state} started!',
+                                       reply_markup=reply_markup)
         return CONTINUE_GAME
 
     pos_player1 = [int(num) for num in query.data]
@@ -230,7 +231,8 @@ def main():
         fallbacks=[CommandHandler('start', start)],
     )
 
-    # Add ConversationHandler to application that will be used for handling updates
+    # Add ConversationHandler to application
+    # that will be used for handling updates
     application.add_handler(conv_handler)
 
     # Run the bot until the user presses Ctrl-C
