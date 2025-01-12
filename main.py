@@ -27,7 +27,7 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # get token using BotFather
-TOKEN = '8105176910:AAHIQbYmIVDdIOWSdPI6dsO5sNrGtQgT3x4'
+TOKEN = 'YOUR TG TOKEN'
 
 CONTINUE_GAME, FINISH_GAME = range(2)
 GAME_STATE = None
@@ -143,16 +143,16 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['current_player'] = CROSS
         keyboard = generate_keyboard(context.user_data['keyboard_state'])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        text = f'{context.user_data["game_state"]} started!'
+        text = f'{context.user_data['game_state']} started!'
         await query.message.reply_text(text, reply_markup=reply_markup)
         return CONTINUE_GAME
 
     pos_player1 = [int(num) for num in query.data]
-    current_field = context.user_data['keyboard_state']
-    if current_field[pos_player1[0]][pos_player1[1]] != FREE_SPACE:
+    if (context.user_data['keyboard_state'][pos_player1[0]][pos_player1[1]]
+            != FREE_SPACE):
         keyboard = generate_keyboard(context.user_data['keyboard_state'])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        text = "Position already taken! Choose a free spot."
+        text = 'Position already taken! Choose a free spot.'
         await query.message.reply_text(text, reply_markup=reply_markup)
         return CONTINUE_GAME
 
@@ -200,7 +200,9 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def end(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """End the game."""
+    """Returns `ConversationHandler.END`, which tells the
+    ConversationHandler that the conversation is over.
+    """
     context.user_data['keyboard_state'] = get_default_state()
     await (update.callback_query.
            message.reply_text('Start new game!',
@@ -209,10 +211,16 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
-    """Run the bot."""
+    """Run the bot"""
+    # Create the Application and pass it your bot's token.
     application = Application.builder().token(TOKEN).build()
 
-    # ConversationHandler setup
+    # Setup conversation handler with the states CONTINUE_GAME and FINISH_GAME
+    # Use the pattern parameter to pass CallbackQueries with specific
+    # data pattern to the corresponding handlers.
+    # ^ means "start of line/string"
+    # $ means "end of line/string"
+    # So ^ABC$ will only allow 'ABC'
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
@@ -222,7 +230,10 @@ def main():
         fallbacks=[CommandHandler('start', start)],
     )
 
+    # Add ConversationHandler to application that will be used for handling updates
     application.add_handler(conv_handler)
+
+    # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
