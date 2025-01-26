@@ -13,6 +13,7 @@ from telegram.ext import (
     ContextTypes,
     ConversationHandler,
 )
+import os
 
 
 # Enable logging
@@ -27,7 +28,7 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # get token using BotFather
-TOKEN = 'YOUR TG TOKEN'
+TOKEN = os.getenv('TG_TOKEN')
 
 CONTINUE_GAME, FINISH_GAME = range(2)
 GAME_STATE = None
@@ -138,66 +139,71 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    if context.user_data['game_state'] is None:
+    # Initialize game state if none
+    if context.user_data.get('game_state') is None:
         context.user_data['game_state'] = query.data
         context.user_data['current_player'] = CROSS
+        context.user_data['keyboard_state'] = [
+            [FREE_SPACE] * 3 for _ in range(3)
+        ]
         keyboard = generate_keyboard(context.user_data['keyboard_state'])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        game_state = context.user_data['game_state']
-        await query.message.reply_text(f'{game_state} started!',
-                                       reply_markup=reply_markup)
+
+        cur_state = context.user_data['game_state']
+        await query.edit_message_text(f'{cur_state} started!')
+        await query.edit_message_reply_markup(reply_markup=reply_markup)
         return CONTINUE_GAME
 
     pos_player1 = [int(num) for num in query.data]
-    if (context.user_data['keyboard_state'][pos_player1[0]][pos_player1[1]]
-            != FREE_SPACE):
-        keyboard = generate_keyboard(context.user_data['keyboard_state'])
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        text = 'Position already taken! Choose a free spot.'
-        await query.message.reply_text(text, reply_markup=reply_markup)
+
+    # Check if the position is free
+    if (
+        context.user_data['keyboard_state'][pos_player1[0]][pos_player1[1]]
+        != FREE_SPACE
+    ):
+        await update_board(
+            query, context, 'Position already taken! Choose a free spot.'
+        )
         return CONTINUE_GAME
 
     current_player = context.user_data['current_player']
+    context.user_data['keyboard_state'][pos_player1[0]][pos_player1[1]] = (
+        current_player
+    )
+
+    # Check win or draw conditions
+    if won(context.user_data['keyboard_state']):
+        await update_board(query, context,
+                           f'Player with {current_player} wins!')
+        return FINISH_GAME
+    if draw(context.user_data['keyboard_state']):
+        await update_board(query, context, 'It is a draw!')
+        return FINISH_GAME
+
+    # Update player for Multiplayer or Computer's turn
     if context.user_data['game_state'] == 'Multiplayer game':
-        context.user_data['keyboard_state'][pos_player1[0]][pos_player1[1]] \
-            = current_player
-        context.user_data['current_player'] = ZERO \
-            if current_player == CROSS else CROSS
+        context.user_data['current_player'] = ZERO if (
+                current_player == CROSS
+        ) else CROSS
     else:
-        context.user_data['keyboard_state'][pos_player1[0]][pos_player1[1]] \
-            = CROSS
-        keyboard = generate_keyboard(context.user_data['keyboard_state'])
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        if won(context.user_data['keyboard_state']):
-            await query.message.reply_text(f'Player with {CROSS} wins!',
-                                           reply_markup=reply_markup)
-            return FINISH_GAME
         computer = Player(context.user_data['keyboard_state'])
         context.user_data['keyboard_state'] = computer.move()
-        keyboard = generate_keyboard(context.user_data['keyboard_state'])
-        reply_markup = InlineKeyboardMarkup(keyboard)
         if won(context.user_data['keyboard_state']):
-            await query.message.reply_text(f'Player with {ZERO} wins!',
-                                           reply_markup=reply_markup)
+            await update_board(query, context,
+                               f'Player with {ZERO} wins!')
             return FINISH_GAME
 
-    context.user_data['current_player'] = ZERO \
-        if current_player == CROSS else CROSS
+    # Update the board for the next move
+    await update_board(query, context, 'Next move')
+    return CONTINUE_GAME
 
+
+async def update_board(query, context, message: str):
+    """Helper to update the game board and message."""
     keyboard = generate_keyboard(context.user_data['keyboard_state'])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    if won(context.user_data['keyboard_state']):
-        text = f'Player with {current_player} wins!'
-        await query.message.reply_text(text,
-                                       reply_markup=reply_markup)
-        return FINISH_GAME
-    elif draw(context.user_data['keyboard_state']):
-        await query.message.reply_text('It is a draw!')
-        return FINISH_GAME
-
-    await query.message.reply_text('Next move',
-                                   reply_markup=reply_markup)
-    return CONTINUE_GAME
+    await query.edit_message_text(message)
+    await query.edit_message_reply_markup(reply_markup=reply_markup)
 
 
 async def end(update: Update, context: ContextTypes.DEFAULT_TYPE):
